@@ -1,0 +1,100 @@
+# Collect source account, break if account is not found
+try
+{
+    $Source = Get-ADUser (Read-Host "ENTER SOURCE ACCOUNT USER NAME")
+    Write-Host -ForegroundColor Green "SELECTED " -NoNewline
+    Write-Host -ForegroundColor Yellow "SOURCE " -NoNewline
+    Write-Host -ForegroundColor Green "ACCOUNT: $($Source.name)"
+}
+catch
+{
+    Write-Host -ForegroundColor Red "SOURCE ACCOUNT NOT FOUND - EXITING"; BREAK
+}
+
+# Collect destination account, break if account is not found
+try
+{
+    $Destination = Get-ADUser (Read-Host "ENTER DESTINATION ACCOUNT USER NAME")
+    Write-Host -ForegroundColor Green "SELECTED " -NoNewline
+    Write-Host -ForegroundColor Yellow "DESTINATION " -NoNewline
+    Write-Host -ForegroundColor Green "ACCOUNT: $($Destination.name)"
+}
+catch
+{
+    Write-Host -ForegroundColor Red "DESTINATION ACCOUNT NOT FOUND - EXITING"; BREAK
+}
+
+# Display collected accounts
+Write-Host " "
+Write-Host -ForegroundColor Green "GROUP MEMBERSHIPS WILL BE COPIED " -NoNewline
+Write-Host -ForegroundColor Yellow "FROM " -NoNewline
+Write-Host -ForegroundColor Green "$($Source.name) ($($Source.samaccountname)) " -NoNewline
+Write-Host -ForegroundColor Yellow "TO " -NoNewline
+Write-Host -ForegroundColor Green "$($Destination.name) ($($Destination.samaccountname))"
+
+# Confirm collected accounts, break if not confirmed
+if ((Read-Host "CONFIRM SELECTION (Y/N)") -ne "Y")
+{
+    Write-Host -ForegroundColor Red "SELECTION NOT CONFIRMED - EXITING"; BREAK
+}
+
+# Check destination account group memberships, offer to remove
+Write-Host " "; $DestinationDelete = $null
+$DestinationGroups = Get-ADPrincipalGroupMembership $Destination | Where-Object {$_.name -ne "domain users"}
+if ($DestinationGroups.count -gt "0")
+{
+    Write-Host -ForegroundColor Red "DESTINATION ACCOUNT HAS GROUP MEMBERSHIPS"
+    $DestinationDelete = Read-Host "REMOVE GROUP MEMBERSHIPS? (Y/N)"
+    Write-Host " "
+}
+
+# Create array for clipboard copy
+$Export = @()
+
+# Delete destination account group memberships if selected
+if ($DestinationDelete -eq "Y") 
+{
+    foreach ($Group in $DestinationGroups) 
+    {
+        try
+        {
+            $Remove = "$($Destination.name) ($($Destination.samaccountname)) REMOVED FROM $($Group.name)"
+            Remove-ADGroupMember $Group $Destination -Confirm:$false
+            Write-Host -ForegroundColor Yellow $Remove
+            $Export += $Remove
+        }
+        catch
+        {
+            $NoRemove = "UNABLE TO REMOVE $($Destination.name) ($($Destination.samaccountname)) FROM $($Group.name)"
+            Write-Host -ForegroundColor Red $Remove
+            $Export += $NoRemove
+        }
+    }
+}
+
+# Copy group memberships from source to destination, exclude SE-O365-E3_users_restricted
+foreach ($Group in (Get-ADPrincipalGroupMembership $Source | Where-Object {$_.name -ne "SE-O365-E3_Users_Restricted" -and $_.name -ne "Domain Users"})) 
+{
+    try 
+    {
+        $Add = "$($Destination.name) ($($Destination.samaccountname)) ADDED TO $($Group.name)"
+        Add-ADGroupMember $Group $Destination
+        Write-Host -ForegroundColor Green $Add
+        $Export += $Add
+    } 
+    catch 
+    {
+        $NoAdd = "UNABLE TO ADD $($Destination.name) ($($Destination.samaccountname)) TO $($Group.name)"
+        Write-Host -ForegroundColor Red $NoAdd
+        $Export += $NoAdd
+    }
+}
+
+# Copy result to clipboard
+Set-Clipboard $Export
+Write-Host " "
+Write-Host -ForegroundColor Green "OPERATIONS COPIED TO CLIPBOARD"
+
+# Confirm end of operations
+Write-Host " "
+Write-Host -ForegroundColor Green "SCRIPT END"
