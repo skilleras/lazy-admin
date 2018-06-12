@@ -1,0 +1,74 @@
+# Initial variable creation and import of needed module
+$Check = $null; Import-Module activedirectory
+
+# Operator input and confirmation
+while ($Check -ne "Y") 
+{
+    ""; $User = Read-Host "ENTER USER SAMACCOUNTNAME"; $Acc = Get-ADUser $User -Properties accountexpirationdate,passwordlastset,passwordneverexpires,passwordexpired,enabled,lockedout,manager
+    ""; Write-Host -ForegroundColor Yellow "SELECTED USER: $($Acc.Name)"; ""; $Check = Read-Host "PROCEED WITH SELECTED USER? (Y/N)"
+}
+
+# Check if the account is enabled
+if ($Acc.Enabled -eq $true)
+{
+    ""; Write-Host -ForegroundColor Green "PASSED - ACCOUNT IS ENABLED"
+}
+else
+{
+    $Manager = Get-ADUser $Acc.Manager
+    ""; Write-Host -ForegroundColor Red "FAILED - ACCOUNT IS DISABLED - MANAGER ACTION REQUIRED"
+    Write-Host -ForegroundColor Yellow "USERS MANAGER IS $($Manager.Name) ($($Manager.SamAccountName))"
+}
+
+# Check if the account has expired
+try 
+{
+    $AccExp = Get-Date $Acc.AccountExpirationDate
+} 
+catch 
+{
+    Write-Host -ForegroundColor Green "PASSED - ACCOUNT IS VALID"; Write-Host -ForegroundColor Yellow "   ACCOUNT IS SET TO NEVER EXPIRE"; $AccExp = $null
+}
+if ($AccExp -gt (Get-Date) -and $AccExp -ne $null)
+{
+    $GetDateAccExp = (Get-Date $AccExp).AddDays(-1); Write-Host -ForegroundColor Green "PASSED - ACCOUNT IS VALID - ACCOUNT EXPIRES $(Get-Date $GetDateAccExp -UFormat %d/%m-%Y)"
+}
+if ($AccExp -lt (Get-Date) -and $AccExp -ne $null) 
+{
+    $GetDateAccExp = (Get-Date $AccExp).AddDays(-1); Write-Host -ForegroundColor Red "FAILED - ACCOUNT EXPIRED $(Get-Date $GetDateAccExp -UFormat %d/%m-%Y)"
+}
+
+# Check if the account password has expired
+if ($Acc.PasswordNeverExpires)
+{
+    Write-Host -ForegroundColor Green "PASSED - ACCOUNT PASSWORD IS SET TO NEVER EXPIRE"
+}
+else
+{
+    if ($Acc.PasswordExpired)
+    {
+        Write-Host -ForegroundColor Red "FAILED - ACCOUNT PASSWORD HAS EXPIRED"
+        if ((Read-Host "SET NEW PASSWORD? (Y/N)") -eq "Y")
+        {
+            Set-ADAccountPassword $User -Reset -NewPassword (Read-Host "ENTER NEW ACCOUNT PASSWORD" -AsSecureString)
+            Write-Host -ForegroundColor Yellow "ACTION - NEW PASSWORD SET"
+        }
+    } 
+    else 
+    {
+        Write-Host -ForegroundColor Green "PASSED - ACCOUNT PASSWORD IS VALID"
+        Write-Host -ForegroundColor Yellow "   PASSWORD LAST SET  $(Get-Date $Acc.PasswordLastSet -UFormat %d/%m-%Y)"
+        Write-Host -ForegroundColor Yellow "   PASSWORD EXPIRES  $((Get-Date $Acc.PasswordLastSet).AddDays(90) | Get-Date -UFormat %d/%m-%Y)"
+    }
+}
+
+# Check if the account is locked out
+if ($Acc.LockedOut -eq $false)
+{
+    Write-Host -ForegroundColor Green "PASSED - ACCOUNT IS NOT LOCKED OUT"
+}
+else
+{
+    Write-Host -ForegroundColor Red "FAILED - ACCOUNT IS LOCKED"; Unlock-ADAccount $User
+    Write-Host -ForegroundColor Yellow "ACTION - ACCOUNT HAS BEEN UNLOCKED"
+}
