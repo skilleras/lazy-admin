@@ -1,0 +1,92 @@
+# WORK IN PROGRESS - NOT FULLY TESTED
+
+# Request user to process and set functionality variable
+$User = (Read-Host "ENTER USER E-MAIL ADDRESS").ToUpper(); $SetNewAutoReply = $true
+
+# Verify that user exists
+while (!([bool](Get-MsolUser -UserPrincipalName $User -ErrorAction SilentlyContinue)))
+{
+    ""; Write-Host -ForegroundColor Red "USER $User NOT FOUND"; ""
+    $User = (Read-Host "ENTER USER E-MAIL ADDRESS").ToUpper()
+}
+
+# Check if autoreply is already enabled and offer to disable if true
+if ((Get-MailboxAutoReplyConfiguration -Identity $User).AutoReplyState -eq "Enabled")
+{
+    ""; Write-Host -ForegroundColor Yellow "AUTOREPLY IS CURRENTLY ENABLED"; ""
+    if ((Read-Host "DISABLE AUTOREPLY? (Y/N)") -eq "Y")
+    {
+        Set-MailboxAutoReplyConfiguration -Identity $User -AutoReplyState Disabled; $SetNewAutoReply = $false
+        ""; Write-Host -ForegroundColor Yellow "EXTERNAL AND INTERNAL AUTOREPLY FOR $User HAS BEEN DISABLED"
+    }
+}
+
+# Enable and set/delete external/internal autoreply
+if ($SetNewAutoReply)
+{
+    ""; Write-Host -ForegroundColor Yellow "SKIPPING BOTH OPTIONS BELOW WILL NOT DELETE ANYTHING"; ""
+    $External = Read-Host "ENTER EXTERNAL AUTOREPLY MESSAGE TO SET - PRESS ENTER TO SKIP AND DELETE"
+    $Internal = Read-Host "ENTER INTERNAL AUTOREPLY MESSAGE TO SET - PRESS ENTER TO SKIP AND DELETE"; ""
+    if ((Read-Host "ENABLE AUTOREPLY IMMEDIATELY AND INDEFINITELY? (Y/N)") -eq "Y")
+    {
+        $AutoReplyState = "Enabled"
+    }
+    else
+    {
+        $AutoReplyState = "Scheduled"
+    }
+    $StartTime = $null; $EndTime = $null
+    while (($StartTime -eq $null) -and ($AutoReplyState -eq "Scheduled"))
+    {
+        ""; Write-Host -ForegroundColor Yellow "DATE FORMAT: DD/MM/YYYY HH:MM:SS (CENTRAL EUROPEAN TIME)"; ""
+        $PrelStartTime = Read-Host "ENTER DATE TO START SENDING AUTOREPLY - PRESS ENTER TO START NOW"
+        if ($PrelStartTime.Length -eq 0)
+        {
+            $StartTime = Get-Date
+        }
+        else
+        {
+            try
+            {
+                $StartTime = Get-Date $PrelStartTime
+            }
+            catch
+            {
+                $StartTime = $null
+            }
+        }
+    $EndTime = (Get-Date $StartTime).AddDays($(Read-Host "ENTER NUMBER OF DAYS TO SEND AUTOREPLY (INCLUDING WEEKENDS)"))
+    }
+    $Message = [pscustomobject]@{
+        External = $External
+        Internal = $Internal
+        StartTime = $StartTime
+        EndTime = $EndTime
+        }
+    switch ($Message)
+    {
+        {((($_.Internal).Length -ne 0) -and (($_.External).Length -ne 0))}
+        {
+            Set-MailboxAutoReplyConfiguration -Identity $User -AutoReplyState $AutoReplyState -ExternalMessage $_.External -InternalMessage $_.Internal -StartTime $StartTime -EndTime $EndTime
+            ""; Write-Host -ForegroundColor Yellow "EXTERNAL AUTOREPLY FOR USER $User HAS BEEN SET TO: '$($_.External)'"
+            ""; Write-Host -ForegroundColor Yellow "INTERNAL AUTOREPLY FOR USER $User HAS BEEN SET TO: '$($_.Internal)'"
+        }
+        {((($_.Internal).Length -eq 0) -and (($_.External).Length -ne 0))}
+        {
+            Set-MailboxAutoReplyConfiguration -Identity $User -AutoReplyState $AutoReplyState -ExternalMessage $_.External -InternalMessage $null -StartTime $StartTime -EndTime $EndTime
+            ""; Write-Host -ForegroundColor Yellow "EXTERNAL AUTOREPLY FOR USER $User HAS BEEN SET TO: '$($_.External)'"
+            ""; Write-Host -ForegroundColor Yellow "INTERNAL AUTOREPLY FOR USER $User HAS BEEN DELETED"
+        }
+        {((($_.Internal).Length -ne 0) -and (($_.External).Length -eq 0))}
+        {
+            Set-MailboxAutoReplyConfiguration -Identity $User -AutoReplyState $AutoReplyState -ExternalMessage $null -InternalMessage $_.Internal -StartTime $StartTime -EndTime $EndTime
+            ""; Write-Host -ForegroundColor Yellow "EXTERNAL AUTOREPLY FOR USER $User HAS BEEN DELETED"
+            ""; Write-Host -ForegroundColor Yellow "INTERNAL AUTOREPLY FOR USER $User HAS BEEN SET TO: '$($_.Internal)'"
+        }
+        {((($_.Internal).Length -eq 0) -and (($_.External).Length -eq 0))}
+        {
+            ""; Write-Host -ForegroundColor Yellow "BOTH INTERNAL AND EXTERNAL AUTOREPLY SKIPPED"
+            Write-Host -ForegroundColor Yellow "NEITHER INTERNAL NOR EXTERNAL AUTOREPLY WAS DELETED"
+        }
+    }
+}
