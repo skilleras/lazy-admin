@@ -1,2 +1,2 @@
 # lazy-admin
-Scripts for Active Directory administration
+Scripts for general administration
