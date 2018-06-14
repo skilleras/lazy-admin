@@ -1,0 +1,65 @@
+# Function to enumerate users and group
+function nyGet-ADGroupMember ($Entry)
+{
+    # Process groups
+    if (($Entry.Name -like "*grpAcc*") -or ($Entry.Name -like "*grpRole*") -or ($Entry.Name -like "*grpOrg*"))
+    {
+        $Group = Get-ADGroupMember $Entry.Name; $GroupName = (Get-ADGroup $Entry.Name).Name
+        $Result = [pscustomobject]@{
+            Name=$Entry.Name
+            UserName="N/A"
+            Enabled="N/A"
+            Parent=$Entry.Parent
+            }
+        foreach ($Member in $Group)
+        {
+            $Entry = [pscustomobject]@{
+            Name=$Member.Name
+            Username=$null
+            Enabled=$null
+            Parent=$GroupName
+            }
+            nyGet-ADGroupMember $Entry
+        }
+    }
+    # Process users
+    else
+    {
+        $UserName = $Entry.Name; $User = Get-ADUser -Filter {name -like $UserName} -Properties enabled
+        $Result = [pscustomobject]@{
+            Name=$User.Name
+            UserName=$User.SamAccountName
+            Enabled=$User.Enabled
+            Parent=$Entry.Parent
+            }
+    }
+    return $Result
+}
+
+# Collect ACL and create output array
+$Import = (Read-Host "ENTER FULL PATH TO DIRECTORY (\\server\share)").ToUpper()
+while (!(Test-Path $Import))
+{
+    ""; Write-Host -ForegroundColor Red "$Import NOT FOUND"; ""
+    $Import = (Read-Host "ENTER FULL PATH TO DIRECTORY (\\server\share)").ToUpper()
+}
+
+""; Write-Host -ForegroundColor Green "COLLECTING ACCESS CONTROL LIST FOR $Import"
+$ACL = (Get-Acl $Import).Access | Where-Object {$_.IdentityReference -notmatch "SYSTEM|BUILTIN|NT AUTORITHY|CREATOR OWNER"}
+$Output = @()
+""; Write-Host -ForegroundColor Yellow "PROCESSING ACCESS CONTROL LIST FOR $Import"
+
+# Call recursive function to enumerate all access control list entries
+foreach ($ACE in $ACL)
+{
+    $Entry = [pscustomobject]@{
+        Name=$ACE.IdentityReference.Value.Split("\")[1]
+        Username=$null
+        Enabled=$null
+        Parent="ROOT"
+        }
+    $Output += nyGet-ADGroupMember $Entry
+}
+
+# Output result
+$Output 
