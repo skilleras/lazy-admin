@@ -49,16 +49,24 @@ $ACL = (Get-Acl $Import).Access | Where-Object {$_.IdentityReference -notmatch "
 $Output = @()
 ""; Write-Host -ForegroundColor Yellow "PROCESSING ACCESS CONTROL LIST FOR $Import"
 
-# Call recursive function to enumerate all access control list entries
-foreach ($ACE in $ACL)
+# Check if 'Everyone' has access to folder
+if ($ACL.IdentityReference.Value -contains "Everyone")
 {
-    $Entry = [pscustomobject]@{
-        Name=$ACE.IdentityReference.Value.Split("\")[1]
-        Username=$null
-        Enabled=$null
-        Parent="ROOT"
-        }
-    $Output += nyGet-ADGroupMember $Entry
+    ""; Write-Host -ForegroundColor Red "THIS FOLDER IS SHARED WITH 'EVERYONE' - EXITING"; BREAK
+}
+else
+{
+    # Call recursive function to enumerate all access control list entries
+    foreach ($ACE in $ACL)
+    {
+        $Entry = [pscustomobject]@{
+            Name=$ACE.IdentityReference.Value.Split("\")[1]
+            Username=$null
+            Enabled=$null
+            Parent="ROOT"
+            }
+        $Output += nyGet-ADGroupMember $Entry
+    }
 }
 
 # Output result
