@@ -52,7 +52,7 @@ $Output = @()
 # Check if 'Everyone' has access to folder
 if ($ACL.IdentityReference.Value -contains "Everyone")
 {
-    ""; Write-Host -ForegroundColor Red "THIS FOLDER IS SHARED WITH 'EVERYONE' - EXITING"; BREAK
+    ""; Write-Host -ForegroundColor Red "FOLDER $Import IS SHARED WITH 'EVERYONE' - EXITING"; BREAK
 }
 else
 {
